@@ -15,15 +15,17 @@
 #include "driver/gpio.h"
 #include "esp_rom_sys.h"
 #include "esp_timer.h"
-#include "wifi.h"
+#include "protocol_examples_common.h"
+
+#define TAG "full-speed-gates"
 
 #define ROLE_SENDER_1 0
 #define ROLE_RECEIVER_2 1
-#define ROLE ROLE_RECEIVER_2
+#define ROLE ROLE_SENDER_1
 
 #define ESP_BOARD_1_MAC { 0x24, 0xDC, 0xC3, 0x4A, 0x4D, 0x1C }
 #define ESP_BOARD_2_MAC { 0x24, 0xDC, 0xC3, 0x49, 0xDE, 0xE4 }
-#define PEER_MAC ESP_BOARD_1_MAC
+#define PEER_MAC ESP_BOARD_2_MAC
 
 #define TRIG GPIO_NUM_5
 #define ECHO GPIO_NUM_18
@@ -60,40 +62,20 @@ static void on_recv(const esp_now_recv_info_t *info, const uint8_t *data, int le
 }
 
 void wifi_init(void) {
-    esp_err_t r = nvs_flash_init();
-    if (r == ESP_ERR_NVS_NO_FREE_PAGES || r == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ESP_ERROR_CHECK(nvs_flash_init());
-    }
+    ESP_ERROR_CHECK(nvs_flash_init());
     ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
-    esp_netif_create_default_wifi_sta();    
+    ESP_ERROR_CHECK(esp_event_loop_create_default());  
 
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    ESP_ERROR_CHECK(example_connect());
+    ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
 
-    wifi_config_t wifi_config = {
-        .sta = {
-            .ssid = WIFI_SSID,
-            .password = WIFI_PASS,
-        }
-    };
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
-
-    ESP_ERROR_CHECK(esp_wifi_start());
-    ESP_ERROR_CHECK(esp_wifi_connect());
-    
-    wifi_ap_record_t ap;
-    for (int i = 0; i < 100; i++) {
-        if (esp_wifi_sta_get_ap_info(&ap) == ESP_OK) {
-            printf("connected to %s on channel %d\n", (char *)ap.ssid, ap.primary);
-            return;
-        }
-        vTaskDelay(pdMS_TO_TICKS(100));
-    }
-    printf("wifi connect timed out\n");
+    wifi_ap_record_t ap_info;
+    ESP_ERROR_CHECK(esp_wifi_sta_get_ap_info(&ap_info));
+    ESP_LOGI(TAG, "--- Access Point Information ---");
+    ESP_LOG_BUFFER_HEX("MAC Address", ap_info.bssid, sizeof(ap_info.bssid));
+    ESP_LOG_BUFFER_CHAR("SSID", ap_info.ssid, sizeof(ap_info.ssid));
+    ESP_LOGI(TAG, "Primary Channel: %d", ap_info.primary);
+    ESP_LOGI(TAG, "RSSI: %d", ap_info.rssi);
 }
 
 void setup(void) {
@@ -110,7 +92,6 @@ void setup(void) {
     
     gpio_reset_pin(TRIG);
     gpio_set_direction(TRIG, GPIO_MODE_OUTPUT);
-    gpio_set_level(TRIG, 0);
 
     gpio_reset_pin(ECHO);
     gpio_set_direction(ECHO, GPIO_MODE_INPUT);
@@ -139,12 +120,14 @@ void app_main(void)
             if (esp_timer_get_time() - t0 > 5000) {
                 printf("not started\n");
                 failed = true;
-                vTaskDelay(pdMS_TO_TICKS(1000));
                 break;
             }
         }
 
-        if (failed) continue;
+        if (failed) {
+            vTaskDelay(pdMS_TO_TICKS(100));
+            continue;
+        }
 
         int64_t start = esp_timer_get_time();
         while (gpio_get_level(ECHO) == 1) {
@@ -157,22 +140,35 @@ void app_main(void)
         }
         int64_t end = esp_timer_get_time();
 
-        if (failed) continue;
+        if (failed) {
+            vTaskDelay(pdMS_TO_TICKS(100));
+            continue;
+        }
 
         int64_t duration = end - start;
         float distance = duration * SOUND_SPEED / 2;
+        printf("distance = %f\n", distance);
         
-        bool now_in = distance < 20.0f;
+        // bool now_in = distance < 20.0f;
 
-        if (now_in && !in_range) {
-            timingData.time = esp_wifi_get_tsf_time(WIFI_IF_STA);
-            printf("%lld\n", timingData.time);
-            if (timingData.time == 0) continue;
-            #if ROLE == ROLE_RECEIVER_2
+        // if (now_in && !in_range) {
+        //     timingData.time = esp_wifi_get_tsf_time(WIFI_IF_STA);
+        //     printf("%lld\n", timingData.time);
+        //     if (timingData.time == 0) continue;
+        //     #if ROLE == ROLE_RECEIVER_2
+        //         esp_now_send(peer_mac, (uint8_t *)&timingData, sizeof(timingData));
+        //     #endif
+        //     printf("distance = %f\n", distance);
+        // }
+        // in_range = now_in;
+
+        timingData.time = esp_wifi_get_tsf_time(WIFI_IF_STA);
+        printf("Current TSF time: %lld\n", timingData.time);
+        #if ROLE == ROLE_RECEIVER_2
+            if (distance < 20.0) {
                 esp_now_send(peer_mac, (uint8_t *)&timingData, sizeof(timingData));
-            #endif
-            printf("distance = %f\n", distance);
-        }
-        in_range = now_in;
+            }
+        #endif
+        vTaskDelay(pdMS_TO_TICKS(10));
     }   
 }

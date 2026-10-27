@@ -144,7 +144,7 @@ void app_main(void)
             esp_err_t err = esp_now_send(peer_mac, (uint8_t *)&msg, sizeof(msg));
             if (err != ESP_OK) printf("send error: %s\n", esp_err_to_name(err));
 
-            vTaskDelay(pdMS_TO_TICKS(1000));
+            vTaskDelay(pdMS_TO_TICKS(100));
         }
     #else
         while (1) {
