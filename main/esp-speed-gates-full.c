@@ -49,7 +49,7 @@ static void on_recv(const esp_now_recv_info_t *info, const uint8_t *data, int le
     #if ROLE == ROLE_SENDER_1
         message_t board2;
         memcpy(&board2, data, sizeof(board2));
-        printf("board1: %lld, board2: %lld", timingData.time, board2.time);
+        printf("board1: %lld, board2: %lld, ", timingData.time, board2.time);
 
         if (timingData.time != 0) { 
             int64_t elapsedTime = board2.time - timingData.time;
@@ -118,36 +118,35 @@ void app_main(void)
         int64_t t0 = esp_timer_get_time();
         while (gpio_get_level(ECHO) == 0) {
             if (esp_timer_get_time() - t0 > 5000) {
-                printf("not started\n");
+                //printf("not started\n");
                 failed = true;
                 break;
             }
         }
 
         if (failed) {
-            vTaskDelay(pdMS_TO_TICKS(100));
+            vTaskDelay(pdMS_TO_TICKS(10));
             continue;
         }
 
         int64_t start = esp_timer_get_time();
         while (gpio_get_level(ECHO) == 1) {
             if (esp_timer_get_time() - start > 40000) { 
-                printf("stuck\n");
+                //printf("stuck\n");
                 failed = true;
-                vTaskDelay(pdMS_TO_TICKS(1000));
                 break;
             }
         }
         int64_t end = esp_timer_get_time();
 
         if (failed) {
-            vTaskDelay(pdMS_TO_TICKS(100));
+            vTaskDelay(pdMS_TO_TICKS(10));
             continue;
         }
 
         int64_t duration = end - start;
         float distance = duration * SOUND_SPEED / 2;
-        printf("distance = %f\n", distance);
+        //printf("distance = %f\n", distance);
         
         // bool now_in = distance < 20.0f;
 
@@ -162,13 +161,13 @@ void app_main(void)
         // }
         // in_range = now_in;
 
-        timingData.time = esp_wifi_get_tsf_time(WIFI_IF_STA);
-        printf("Current TSF time: %lld\n", timingData.time);
-        #if ROLE == ROLE_RECEIVER_2
-            if (distance < 20.0) {
+        if (distance < 20.0) {
+            timingData.time = esp_wifi_get_tsf_time(WIFI_IF_STA);
+            #if ROLE == ROLE_RECEIVER_2
                 esp_now_send(peer_mac, (uint8_t *)&timingData, sizeof(timingData));
-            }
-        #endif
+            #endif
+        }
+        //printf("Current TSF time: %lld\n", timingData.time);
         vTaskDelay(pdMS_TO_TICKS(10));
     }   
 }
