@@ -118,7 +118,6 @@ void app_main(void)
         int64_t t0 = esp_timer_get_time();
         while (gpio_get_level(ECHO) == 0) {
             if (esp_timer_get_time() - t0 > 5000) {
-                //printf("not started\n");
                 failed = true;
                 break;
             }
@@ -131,8 +130,7 @@ void app_main(void)
 
         int64_t start = esp_timer_get_time();
         while (gpio_get_level(ECHO) == 1) {
-            if (esp_timer_get_time() - start > 40000) { 
-                //printf("stuck\n");
+            if (esp_timer_get_time() - start > 40000) {
                 failed = true;
                 break;
             }
@@ -146,20 +144,6 @@ void app_main(void)
 
         int64_t duration = end - start;
         float distance = duration * SOUND_SPEED / 2;
-        //printf("distance = %f\n", distance);
-        
-        // bool now_in = distance < 20.0f;
-
-        // if (now_in && !in_range) {
-        //     timingData.time = esp_wifi_get_tsf_time(WIFI_IF_STA);
-        //     printf("%lld\n", timingData.time);
-        //     if (timingData.time == 0) continue;
-        //     #if ROLE == ROLE_RECEIVER_2
-        //         esp_now_send(peer_mac, (uint8_t *)&timingData, sizeof(timingData));
-        //     #endif
-        //     printf("distance = %f\n", distance);
-        // }
-        // in_range = now_in;
 
         if (distance < 20.0) {
             timingData.time = esp_wifi_get_tsf_time(WIFI_IF_STA);
